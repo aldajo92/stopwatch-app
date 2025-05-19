@@ -79,9 +79,13 @@ class StopwatchService : Service() {
         getNotificationManager()
 
         val action = intent?.getStringExtra(STOPWATCH_ACTION)
-        startForeground(1, buildNotification())
+//        startForeground(1, buildNotification())
 
-        Log.d("Stopwatch", "onStartCommand Action: $action")
+        // Always start in foreground and schedule updates if running
+        if (isStopWatchRunning || action == START) {
+            startForeground(1, buildNotification())
+            scheduleNotificationUpdate()
+        }
 
         when (action) {
             START -> startStopwatch()

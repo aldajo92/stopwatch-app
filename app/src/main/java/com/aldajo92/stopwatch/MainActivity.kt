@@ -55,7 +55,6 @@ class MainActivity : ComponentActivity() {
     // TODO: move to viewModel
     private lateinit var statusReceiver: BroadcastReceiver
     private lateinit var timeReceiver: BroadcastReceiver
-    private var isStopwatchRunning = false
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,14 +79,18 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         // Moving the service to background when the app is visible
-        moveToBackground()
+//        moveToBackground()
     }
 
     override fun onResume() {
         super.onResume()
 
-        getStopwatchStatus()
+        setupStopwatchReceiver()
 
+    }
+
+    private fun setupStopwatchReceiver() {
+        // getStopwatchStatus()
         // Receiving stopwatch status from service
         val statusFilter = IntentFilter()
         statusFilter.addAction(StopwatchService.STOPWATCH_STATUS)
@@ -96,10 +99,9 @@ class MainActivity : ComponentActivity() {
             override fun onReceive(p0: Context?, p1: Intent?) {
                 val isRunning =
                     p1?.getBooleanExtra(StopwatchService.IS_STOPWATCH_RUNNING, false) ?: false
-                isStopwatchRunning = isRunning
                 val timeElapsed = p1?.getIntExtra(StopwatchService.TIME_ELAPSED, 0) ?: 0
 
-                updateLayout(isStopwatchRunning)
+                updateLayout(isRunning)
                 updateStopwatchValue(timeElapsed)
             }
         }
@@ -115,11 +117,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         registerReceiver(timeReceiver, timeFilter, Context.RECEIVER_EXPORTED)
-
-        viewModel.initReceivers(
-            statusReceiver,
-            timeReceiver
-        )
     }
 
     override fun onPause() {
@@ -157,22 +154,22 @@ class MainActivity : ComponentActivity() {
 
     private fun moveToForeground() {
         Log.i("MainActivity", "moveToForeground: ${viewModel.isRunning.value}")
-//        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
-//        stopwatchService.putExtra(
-//            StopwatchService.STOPWATCH_ACTION,
-//            StopwatchService.MOVE_TO_FOREGROUND
-//        )
-//        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
+        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
+        stopwatchService.putExtra(
+            StopwatchService.STOPWATCH_ACTION,
+            StopwatchService.MOVE_TO_FOREGROUND
+        )
+        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
     }
 
     private fun moveToBackground() {
         Log.i("MainActivity", "moveToBackground: ${viewModel.isRunning.value}")
-//        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
-//        stopwatchService.putExtra(
-//            StopwatchService.STOPWATCH_ACTION,
-//            StopwatchService.MOVE_TO_BACKGROUND
-//        )
-//        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
+        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
+        stopwatchService.putExtra(
+            StopwatchService.STOPWATCH_ACTION,
+            StopwatchService.MOVE_TO_BACKGROUND
+        )
+        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
