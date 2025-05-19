@@ -1,4 +1,4 @@
-package `in`.rithikjain.stopwatch
+package com.aldajo92.stopwatch
 
 import android.Manifest.permission.POST_NOTIFICATIONS
 import android.annotation.SuppressLint
@@ -12,7 +12,7 @@ import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import `in`.rithikjain.stopwatch.databinding.ActivityMainBinding
+import com.aldajo92.stopwatch.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
@@ -68,15 +68,16 @@ class MainActivity : AppCompatActivity() {
         statusReceiver = object : BroadcastReceiver() {
             @SuppressLint("SetTextI18n")
             override fun onReceive(p0: Context?, p1: Intent?) {
-                val isRunning = p1?.getBooleanExtra(StopwatchService.IS_STOPWATCH_RUNNING, false)!!
+                val isRunning =
+                    p1?.getBooleanExtra(StopwatchService.IS_STOPWATCH_RUNNING, false) ?: false
                 isStopwatchRunning = isRunning
-                val timeElapsed = p1.getIntExtra(StopwatchService.TIME_ELAPSED, 0)
+                val timeElapsed = p1?.getIntExtra(StopwatchService.TIME_ELAPSED, 0) ?: 0
 
                 updateLayout(isStopwatchRunning)
                 updateStopwatchValue(timeElapsed)
             }
         }
-        registerReceiver(statusReceiver, statusFilter)
+        registerReceiver(statusReceiver, statusFilter, Context.RECEIVER_EXPORTED)
 
         // Receiving time values from service
         val timeFilter = IntentFilter()
@@ -87,7 +88,7 @@ class MainActivity : AppCompatActivity() {
                 updateStopwatchValue(timeElapsed)
             }
         }
-        registerReceiver(timeReceiver, timeFilter)
+        registerReceiver(timeReceiver, timeFilter, Context.RECEIVER_EXPORTED)
     }
 
     override fun onPause() {
@@ -124,25 +125,25 @@ class MainActivity : AppCompatActivity() {
     private fun getStopwatchStatus() {
         val stopwatchService = Intent(this, StopwatchService::class.java)
         stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.GET_STATUS)
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 
     private fun startStopwatch() {
         val stopwatchService = Intent(this, StopwatchService::class.java)
         stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.START)
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 
     private fun pauseStopwatch() {
         val stopwatchService = Intent(this, StopwatchService::class.java)
         stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.PAUSE)
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 
     private fun resetStopwatch() {
         val stopwatchService = Intent(this, StopwatchService::class.java)
         stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.RESET)
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 
     private fun moveToForeground() {
@@ -151,7 +152,7 @@ class MainActivity : AppCompatActivity() {
             StopwatchService.STOPWATCH_ACTION,
             StopwatchService.MOVE_TO_FOREGROUND
         )
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 
     private fun moveToBackground() {
@@ -160,6 +161,6 @@ class MainActivity : AppCompatActivity() {
             StopwatchService.STOPWATCH_ACTION,
             StopwatchService.MOVE_TO_BACKGROUND
         )
-        startService(stopwatchService)
+        ContextCompat.startForegroundService(this, stopwatchService)
     }
 }
