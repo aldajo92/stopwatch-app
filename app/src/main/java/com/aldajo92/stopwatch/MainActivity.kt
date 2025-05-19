@@ -50,7 +50,7 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: StopwatchViewModel by viewModels()
+    private val stopWatchViewModel: StopwatchViewModel by viewModels()
 
     // TODO: move to viewModel
     private lateinit var statusReceiver: BroadcastReceiver
@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
         unregisterReceiver(timeReceiver)
 
         // Moving the service to foreground when the app is in background / not visible
-        if (viewModel.isRunning.value) {
+        if (stopWatchViewModel.isRunning.value) {
             moveToForeground()
         }
     }
@@ -136,24 +136,24 @@ class MainActivity : ComponentActivity() {
         val minutes: Int = timeElapsed / 60
         val seconds: Int = timeElapsed % 60
 
-        viewModel.updateStopwatchValue(
+        stopWatchViewModel.updateStopwatchValue(
             "${"%02d".format(hours)}:${"%02d".format(minutes)}:${"%02d".format(seconds)}"
         )
     }
 
     private fun updateLayout(isStopwatchRunning: Boolean) {
-        viewModel.setIsRunning(isStopwatchRunning)
+        stopWatchViewModel.setIsRunning(isStopwatchRunning)
     }
 
     private fun getStopwatchStatus() {
-        Log.i("MainActivity", "getStopwatchStatus: ${viewModel.isRunning.value}")
+        Log.i("MainActivity", "getStopwatchStatus: ${stopWatchViewModel.isRunning.value}")
         val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
         stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.GET_STATUS)
         ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
     }
 
     private fun moveToForeground() {
-        Log.i("MainActivity", "moveToForeground: ${viewModel.isRunning.value}")
+        Log.i("MainActivity", "moveToForeground: ${stopWatchViewModel.isRunning.value}")
         val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
         stopwatchService.putExtra(
             StopwatchService.STOPWATCH_ACTION,
@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun moveToBackground() {
-        Log.i("MainActivity", "moveToBackground: ${viewModel.isRunning.value}")
+        Log.i("MainActivity", "moveToBackground: ${stopWatchViewModel.isRunning.value}")
         val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
         stopwatchService.putExtra(
             StopwatchService.STOPWATCH_ACTION,
@@ -176,8 +176,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun StopwatchScreen() {
         val context = LocalContext.current
-        val timeElapsedText by viewModel.timeElapsedText.collectAsState()
-        val isRunning by viewModel.isRunning.collectAsState()
+        val timeElapsedText by stopWatchViewModel.timeElapsedText.collectAsState()
+        val isRunning by stopWatchViewModel.isRunning.collectAsState()
 
         Column(
             modifier = Modifier
@@ -216,7 +216,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier
                             .size(36.dp)
                             .clickable {
-                                viewModel.resetStopwatch(context)
+                                stopWatchViewModel.resetStopwatch(context)
                             }
                     )
                 }
@@ -225,9 +225,9 @@ class MainActivity : ComponentActivity() {
             IconButton(
                 onClick = {
                     if (isRunning)
-                        viewModel.pauseStopwatch(context)
+                        stopWatchViewModel.pauseStopwatch(context)
                     else
-                        viewModel.startStopwatch(context)
+                        stopWatchViewModel.startStopwatch(context)
                 },
                 modifier = Modifier
                     .size(60.dp)
