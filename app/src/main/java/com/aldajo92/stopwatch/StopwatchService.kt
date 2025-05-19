@@ -79,10 +79,7 @@ class StopwatchService : Service() {
         getNotificationManager()
 
         val action = intent?.getStringExtra(STOPWATCH_ACTION)
-
-        if (isStopWatchRunning || action == START) {
-            startForeground(1, buildNotification())
-        }
+        startForeground(1, buildNotification())
 
         Log.d("Stopwatch", "onStartCommand Action: $action")
 
@@ -126,7 +123,7 @@ class StopwatchService : Service() {
         notificationJob?.cancel()
         notificationJob = serviceScope.launch {
             while (isActive) {
-                delay(1000)
+                delay(500)
                 updateNotification()
             }
         }
@@ -203,17 +200,15 @@ class StopwatchService : Service() {
     }
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationChannel = NotificationChannel(
-                CHANNEL_ID,
-                "Stopwatch",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            notificationChannel.setSound(null, null)
-            notificationChannel.setShowBadge(true)
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(notificationChannel)
-        }
+        val notificationChannel = NotificationChannel(
+            CHANNEL_ID,
+            "Stopwatch",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        notificationChannel.setSound(null, null)
+        notificationChannel.setShowBadge(true)
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(notificationChannel)
     }
 
     private fun getNotificationManager() {
