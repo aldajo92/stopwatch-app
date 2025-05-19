@@ -1,4 +1,4 @@
-package `in`.rithikjain.stopwatch
+package com.aldajo92.stopwatch
 
 import org.junit.Test
 

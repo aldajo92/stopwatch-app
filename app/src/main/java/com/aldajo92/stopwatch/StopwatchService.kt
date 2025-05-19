@@ -1,14 +1,26 @@
-package `in`.rithikjain.stopwatch
+package com.aldajo92.stopwatch
 
-import android.app.*
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
-import java.util.*
+import androidx.media.app.NotificationCompat.MediaStyle
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 class StopwatchService : Service() {
     companion object {
@@ -33,11 +45,13 @@ class StopwatchService : Service() {
         const val STOPWATCH_STATUS = "STOPWATCH_STATUS"
     }
 
+    private val serviceScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    private var stopwatchJob: Job? = null
+    private var notificationJob: Job? = null
+
     private var timeElapsed: Int = 0
     private var isStopWatchRunning = false
-
-    private var updateTimer = Timer()
-    private var stopwatchTimer = Timer()
 
     // Getting access to the NotificationManager
     private lateinit var notificationManager: NotificationManager
@@ -64,9 +78,14 @@ class StopwatchService : Service() {
         createChannel()
         getNotificationManager()
 
-        val action = intent?.getStringExtra(STOPWATCH_ACTION)!!
+        val action = intent?.getStringExtra(STOPWATCH_ACTION)
+//        startForeground(1, buildNotification())
 
-        Log.d("Stopwatch", "onStartCommand Action: $action")
+        // Always start in foreground and schedule updates if running
+        if (isStopWatchRunning || action == START) {
+            startForeground(1, buildNotification())
+            scheduleNotificationUpdate()
+        }
 
         when (action) {
             START -> startStopwatch()
@@ -75,9 +94,19 @@ class StopwatchService : Service() {
             GET_STATUS -> sendStatus()
             MOVE_TO_FOREGROUND -> moveToForeground()
             MOVE_TO_BACKGROUND -> moveToBackground()
+            else -> {
+                Log.d("Stopwatch", "onStartCommand: Invalid Action")
+            }
         }
 
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopwatchJob?.cancel()
+        notificationJob?.cancel()
+        serviceScope.cancel() // Cancels all coroutines
     }
 
     /*
@@ -90,15 +119,17 @@ class StopwatchService : Service() {
 
         if (isStopWatchRunning) {
             startForeground(1, buildNotification())
+            scheduleNotificationUpdate()
+        }
+    }
 
-            updateTimer = Timer()
-
-            updateTimer.scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    updateNotification()
-
-                }
-            }, 0, 1000)
+    private fun scheduleNotificationUpdate() {
+        notificationJob?.cancel()
+        notificationJob = serviceScope.launch {
+            while (isActive) {
+                delay(500)
+                updateNotification()
+            }
         }
     }
 
@@ -108,8 +139,10 @@ class StopwatchService : Service() {
     * It also stops the foreground service and removes the notification
     * */
     private fun moveToBackground() {
-        updateTimer.cancel()
-        stopForeground(true)
+        notificationJob?.cancel()
+        notificationJob = null
+
+        stopForeground(STOP_FOREGROUND_DETACH)
     }
 
     /*
@@ -121,21 +154,21 @@ class StopwatchService : Service() {
     * */
     private fun startStopwatch() {
         isStopWatchRunning = true
-
         sendStatus()
 
-        stopwatchTimer = Timer()
-        stopwatchTimer.scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                val stopwatchIntent = Intent()
-                stopwatchIntent.action = STOPWATCH_TICK
-
+        stopwatchJob?.cancel()
+        stopwatchJob = serviceScope.launch {
+            while (isActive) {
+                delay(1000)
                 timeElapsed++
 
-                stopwatchIntent.putExtra(TIME_ELAPSED, timeElapsed)
+                val stopwatchIntent = Intent().apply {
+                    action = STOPWATCH_TICK
+                    putExtra(TIME_ELAPSED, timeElapsed)
+                }
                 sendBroadcast(stopwatchIntent)
             }
-        }, 0, 1000)
+        }
     }
 
     /*
@@ -143,7 +176,7 @@ class StopwatchService : Service() {
     * Sends an update of the current state of the stopwatch
     * */
     private fun pauseStopwatch() {
-        stopwatchTimer.cancel()
+        stopwatchJob?.cancel()
         isStopWatchRunning = false
         sendStatus()
     }
@@ -171,24 +204,19 @@ class StopwatchService : Service() {
     }
 
     private fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationChannel = NotificationChannel(
-                CHANNEL_ID,
-                "Stopwatch",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            notificationChannel.setSound(null, null)
-            notificationChannel.setShowBadge(true)
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            notificationManager.createNotificationChannel(notificationChannel)
-        }
+        val notificationChannel = NotificationChannel(
+            CHANNEL_ID,
+            "Stopwatch",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        notificationChannel.setSound(null, null)
+        notificationChannel.setShowBadge(true)
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        notificationManager.createNotificationChannel(notificationChannel)
     }
 
     private fun getNotificationManager() {
-        notificationManager = ContextCompat.getSystemService(
-            this,
-            NotificationManager::class.java
-        ) as NotificationManager
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     }
 
     /*
@@ -207,7 +235,12 @@ class StopwatchService : Service() {
         val seconds: Int = timeElapsed.rem(60)
 
         val intent = Intent(this, MainActivity::class.java)
-        val pIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_ONE_SHOT)
+        val pIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_MUTABLE
+        )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
@@ -224,10 +257,35 @@ class StopwatchService : Service() {
             .setSmallIcon(R.drawable.ic_clock)
             .setOnlyAlertOnce(true)
             .setContentIntent(pIntent)
-            .setAutoCancel(true)
+            .setAutoCancel(false)
+            .apply {
+                val icon = if (isStopWatchRunning) {
+                    R.drawable.ic_pause
+                } else {
+                    R.drawable.ic_play
+                }
+                val titleAction = if (isStopWatchRunning) "stop" else "start"
+                val actionCommand = if (isStopWatchRunning) PAUSE else START
+
+                addAction(
+                    icon,
+                    titleAction,
+                    PendingIntent.getService(
+                        this@StopwatchService,
+                        0,
+                        Intent(
+                            this@StopwatchService,
+                            StopwatchService::class.java
+                        ).apply {
+                            putExtra(STOPWATCH_ACTION, actionCommand)
+                        },
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                    )
+                )
+            }
+            .setStyle(MediaStyle().setShowActionsInCompactView(0))
             .build()
     }
-
 
     /*
     * This function uses the notificationManager to update the existing notification with the new notification
