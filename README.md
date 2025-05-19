@@ -1,1 +1,0 @@
-![Banner](assets/Banner.png)
