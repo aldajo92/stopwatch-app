@@ -1,11 +1,7 @@
 package com.aldajo92.stopwatch
 
 import android.Manifest.permission.POST_NOTIFICATIONS
-import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -32,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -47,14 +44,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 class MainActivity : ComponentActivity() {
 
     private val stopWatchViewModel: StopwatchViewModel by viewModels()
-
-    // TODO: move to viewModel
-    private lateinit var statusReceiver: BroadcastReceiver
-    private lateinit var timeReceiver: BroadcastReceiver
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,108 +72,45 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        // Moving the service to background when the app is visible
-//        moveToBackground()
-    }
-
-    override fun onResume() {
-        super.onResume()
-
-        setupStopwatchReceiver()
-
-    }
-
-    private fun setupStopwatchReceiver() {
-        // getStopwatchStatus()
-        // Receiving stopwatch status from service
-        val statusFilter = IntentFilter()
-        statusFilter.addAction(StopwatchService.STOPWATCH_STATUS)
-        statusReceiver = object : BroadcastReceiver() {
-            @SuppressLint("SetTextI18n")
-            override fun onReceive(p0: Context?, p1: Intent?) {
-                val isRunning =
-                    p1?.getBooleanExtra(StopwatchService.IS_STOPWATCH_RUNNING, false) ?: false
-                val timeElapsed = p1?.getIntExtra(StopwatchService.TIME_ELAPSED, 0) ?: 0
-
-                updateLayout(isRunning)
-                updateStopwatchValue(timeElapsed)
-            }
-        }
-        registerReceiver(statusReceiver, statusFilter, Context.RECEIVER_EXPORTED)
-
-        // Receiving time values from service
-        val timeFilter = IntentFilter()
-        timeFilter.addAction(StopwatchService.STOPWATCH_TICK)
-        timeReceiver = object : BroadcastReceiver() {
-            override fun onReceive(p0: Context?, p1: Intent?) {
-                val timeElapsed = p1?.getIntExtra(StopwatchService.TIME_ELAPSED, 0)!!
-                updateStopwatchValue(timeElapsed)
-            }
-        }
-        registerReceiver(timeReceiver, timeFilter, Context.RECEIVER_EXPORTED)
-    }
-
-    override fun onPause() {
-        super.onPause()
-
-        unregisterReceiver(statusReceiver)
-        unregisterReceiver(timeReceiver)
-
-        // Moving the service to foreground when the app is in background / not visible
-        if (stopWatchViewModel.isRunning.value) {
-            moveToForeground()
-        }
-    }
-
-    private fun updateStopwatchValue(timeElapsed: Int) {
-        val hours: Int = (timeElapsed / 60) / 60
-        val minutes: Int = timeElapsed / 60
-        val seconds: Int = timeElapsed % 60
-
-        stopWatchViewModel.updateStopwatchValue(
-            "${"%02d".format(hours)}:${"%02d".format(minutes)}:${"%02d".format(seconds)}"
-        )
-    }
-
-    private fun updateLayout(isStopwatchRunning: Boolean) {
-        stopWatchViewModel.setIsRunning(isStopwatchRunning)
-    }
-
-    private fun getStopwatchStatus() {
-        Log.i("MainActivity", "getStopwatchStatus: ${stopWatchViewModel.isRunning.value}")
-        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
-        stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.GET_STATUS)
-        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
-    }
-
-    private fun moveToForeground() {
-        Log.i("MainActivity", "moveToForeground: ${stopWatchViewModel.isRunning.value}")
-        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
-        stopwatchService.putExtra(
-            StopwatchService.STOPWATCH_ACTION,
-            StopwatchService.MOVE_TO_FOREGROUND
-        )
-        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
-    }
-
-    private fun moveToBackground() {
-        Log.i("MainActivity", "moveToBackground: ${stopWatchViewModel.isRunning.value}")
-        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
-        stopwatchService.putExtra(
-            StopwatchService.STOPWATCH_ACTION,
-            StopwatchService.MOVE_TO_BACKGROUND
-        )
-        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
-    }
-
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Composable
     fun StopwatchScreen() {
         val context = LocalContext.current
         val timeElapsedText by stopWatchViewModel.timeElapsedText.collectAsState()
         val isRunning by stopWatchViewModel.isRunning.collectAsState()
+
+        // Observe lifecycle to register/unregister receivers
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> {
+                        stopWatchViewModel.registerReceivers(context)
+                    }
+
+                    Lifecycle.Event.ON_PAUSE -> {
+                        stopWatchViewModel.unregisterReceivers(context)
+                        if (stopWatchViewModel.isRunning.value) {
+                            val stopwatchService =
+                                Intent(context, StopwatchService::class.java).apply {
+                                    putExtra(
+                                        StopwatchService.STOPWATCH_ACTION,
+                                        StopwatchService.MOVE_TO_FOREGROUND
+                                    )
+                                }
+                            ContextCompat.startForegroundService(context, stopwatchService)
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+
+            lifecycleOwner.lifecycle.addObserver(observer)
+
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -243,6 +176,35 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    // No needed anymore
+
+    private fun getStopwatchStatus() {
+        Log.i("MainActivity", "getStopwatchStatus: ${stopWatchViewModel.isRunning.value}")
+        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
+        stopwatchService.putExtra(StopwatchService.STOPWATCH_ACTION, StopwatchService.GET_STATUS)
+        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
+    }
+
+    private fun moveToForeground() {
+        Log.i("MainActivity", "moveToForeground: ${stopWatchViewModel.isRunning.value}")
+        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
+        stopwatchService.putExtra(
+            StopwatchService.STOPWATCH_ACTION,
+            StopwatchService.MOVE_TO_FOREGROUND
+        )
+        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
+    }
+
+    private fun moveToBackground() {
+        Log.i("MainActivity", "moveToBackground: ${stopWatchViewModel.isRunning.value}")
+        val stopwatchService = Intent(this@MainActivity, StopwatchService::class.java)
+        stopwatchService.putExtra(
+            StopwatchService.STOPWATCH_ACTION,
+            StopwatchService.MOVE_TO_BACKGROUND
+        )
+        ContextCompat.startForegroundService(this@MainActivity, stopwatchService)
     }
 
 }
